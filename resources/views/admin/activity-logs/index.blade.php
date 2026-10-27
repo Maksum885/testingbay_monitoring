@@ -16,7 +16,7 @@
     </div>
   </div>
 
-  <form method="GET" action="{{ route('admin.activity-logs.index') }}" class="admin-filters admin-card">
+  <form method="GET" action="{{ route('settings.plc-log') }}" class="admin-filters admin-card">
     <div class="admin-filters-grid">
       <div class="admin-field">
         <label for="testing_room_id">Test room</label>

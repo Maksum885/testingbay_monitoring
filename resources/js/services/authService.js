@@ -1,8 +1,7 @@
 /**
- * Token Sanctum + fetch API terautentikasi untuk dashboard SPA.
+ * Fetch helper untuk dashboard SPA.
+ * Single-user, tanpa login: semua endpoint API publik, tidak ada token.
  */
-
-const TOKEN_KEY = 'spm_auth_token';
 
 function apiOrigin() {
     if (import.meta.env.VITE_APP_URL) {
@@ -12,40 +11,15 @@ function apiOrigin() {
 }
 
 export default {
-    TOKEN_KEY,
-
-    getToken() {
-        try {
-            return sessionStorage.getItem(TOKEN_KEY);
-        } catch {
-            return null;
-        }
-    },
-
-    setToken(token) {
-        try {
-            if (token) sessionStorage.setItem(TOKEN_KEY, token);
-            else sessionStorage.removeItem(TOKEN_KEY);
-        } catch {
-            /* ignore */
-        }
-    },
-
-    clearToken() {
-        this.setToken(null);
-    },
-
     /**
-     * Fetch dengan Bearer token. Pada 401 hapus token dan redirect ke /login.
+     * Fetch JSON dari API yang sama-origin.
      * @param {string} path — mis. `/api/dashboard` atau URL absolut
      * @param {RequestInit} options
-     * @returns {Promise<Response|null>} null jika 401 (redirect login)
+     * @returns {Promise<Response|null>}
      */
     async apiFetch(path, options = {}) {
-        const token = this.getToken();
         const headers = new Headers(options.headers || {});
         if (!headers.has('Accept')) headers.set('Accept', 'application/json');
-        if (token) headers.set('Authorization', `Bearer ${token}`);
 
         const url =
             path.startsWith('http') || path.startsWith('//')
@@ -57,14 +31,6 @@ export default {
             headers,
             credentials: 'same-origin',
         });
-
-        if (res.status === 401) {
-            this.clearToken();
-            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-                window.location.href = '/login';
-            }
-            return null;
-        }
 
         return res;
     },

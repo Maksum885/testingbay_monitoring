@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AlarmLog;
 use App\Models\ControlRoom;
 use App\Models\TestingRoom;
-use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 
 class PlcDataService
@@ -13,40 +12,17 @@ class PlcDataService
     /**
      * Bentuk payload dashboard sama seperti normalizeDashboardPayload di frontend:
      * { controlRooms: Record<string, object>, utilities: object }
+     *
+     * Single-user, tanpa login: selalu kembalikan semua control room aktif.
      */
-    public function buildDashboardPayload(User $user): array
+    public function buildDashboardPayload(): array
     {
-        if (! $user->isAdmin() && $user->testing_room_id) {
-            $tr = TestingRoom::query()
-                ->where('is_active', true)
-                ->with(['controlRoom', 'plcDevices', 'roomCameras'])
-                ->find($user->testing_room_id);
-            if (! $tr || ! $tr->controlRoom) {
-                return ['controlRooms' => [], 'utilities' => $this->defaultUtilities()];
-            }
-            $cr = $tr->controlRoom;
-            $cr->setRelation('testingRooms', collect([$tr]));
-            $key = $this->controlRoomKey($cr->code);
-
-            return [
-                'controlRooms' => [$key => $this->buildControlRoomShape($cr)],
-                'utilities' => $this->defaultUtilities(),
-            ];
-        }
-
         $crQuery = ControlRoom::query()->where('is_active', true)->orderBy('code');
-
-        if (! $user->isAdmin()) {
-            if (! $user->control_room_id) {
-                return ['controlRooms' => [], 'utilities' => $this->defaultUtilities()];
-            }
-            $crQuery->where('id', $user->control_room_id);
-        }
 
         $controlRooms = [];
         foreach ($crQuery->with([
             'testingRooms' => function ($q) {
-                $q->where('is_active', true)->orderBy('code')->with(['plcDevices', 'roomCameras']);
+                $q->where('is_active', true)->orderBy('code')->with(['plcDevices']);
             },
         ])->get() as $cr) {
             $key = $this->controlRoomKey($cr->code);
@@ -164,7 +140,6 @@ class PlcDataService
             'alarm_left_motor' => $alarms['left_motor'],
             'alarm_right_motor' => $alarms['right_motor'],
             'alarm_motor' => $alarms['motor'],
-            'alarm_cv_person' => $alarms['cv_person'],
             'events' => $events,
         ];
 
@@ -185,17 +160,6 @@ class PlcDataService
 
         $base['plc_link_status'] = $device?->status ?? 'offline';
         $base['plc_last_seen_at'] = $device?->last_seen_at?->toIso8601String();
-
-        $base['cameras'] = $tr->roomCameras
-            ->sortBy('slot')
-            ->map(fn ($cam) => [
-                'slot' => (int) $cam->slot,
-                'name' => $cam->name,
-                'enabled' => (bool) $cam->is_enabled,
-                'stream_url' => $cam->stream_url ?: null,
-            ])
-            ->values()
-            ->all();
 
         return $base;
     }
@@ -307,7 +271,6 @@ class PlcDataService
             'left_motor' => str_contains($haystack, 'LEFT'),
             'right_motor' => str_contains($haystack, 'RIGHT'),
             'motor' => str_contains($haystack, 'MOTOR'),
-            'cv_person' => str_contains($haystack, 'CV_PERSON_DETECTED'),
         ];
     }
 

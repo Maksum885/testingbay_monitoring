@@ -21,17 +21,11 @@ const DUMMY_ROOM_API_IDS = {
     cell5: 11,
 };
 
-const DUMMY_ROOM_CAMERAS = [
-    { slot: 1, name: 'Camera 1', enabled: true },
-    { slot: 2, name: 'Camera 2', enabled: true },
-];
-
 function enrichDummyRooms(controlRooms) {
     Object.values(controlRooms).forEach((cr) => {
         (cr.rooms || []).forEach((room) => {
             if (!room.plc_link_status) room.plc_link_status = 'online';
             room.api_room_id = DUMMY_ROOM_API_IDS[room.id] ?? 0;
-            room.cameras = structuredClone(DUMMY_ROOM_CAMERAS);
         });
     });
 }
@@ -69,7 +63,7 @@ export function normalizeDashboardPayload(raw) {
 /**
  * Ambil payload dashboard:
  * - Jika `VITE_DASHBOARD_USE_DUMMY=true` → data demo dari `dummy.js` (hanya untuk uji UI).
- * - Selain itu → `/api/dashboard` (Sanctum), lalu opsional `VITE_DASHBOARD_API_URL` + axios.
+ * - Selain itu → `/api/dashboard` (publik), lalu opsional `VITE_DASHBOARD_API_URL` + axios.
  * - Jika semua gagal → payload kosong (bukan dummy).
  */
 export async function getDashboardData() {
@@ -82,14 +76,11 @@ export async function getDashboardData() {
         };
     }
 
-    const token = AuthService.getToken();
-    if (token) {
-        try {
-            const json = await AuthService.apiJson('/api/dashboard', { method: 'GET' });
-            if (json) return normalizeDashboardPayload(json);
-        } catch (e) {
-            console.warn('[dashboard] API error:', e.message);
-        }
+    try {
+        const json = await AuthService.apiJson('/api/dashboard', { method: 'GET' });
+        if (json) return normalizeDashboardPayload(json);
+    } catch (e) {
+        console.warn('[dashboard] API error:', e.message);
     }
 
     const base = import.meta.env.VITE_DASHBOARD_API_URL || '';

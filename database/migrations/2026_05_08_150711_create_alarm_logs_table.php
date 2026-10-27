@@ -25,7 +25,6 @@ return new class extends Migration
             $table->timestamp('triggered_at');
             $table->timestamp('acknowledged_at')->nullable();
             $table->timestamp('resolved_at')->nullable();
-            $table->foreignId('acknowledged_by')->nullable()->constrained('users')->nullOnDelete();
 
             $table->timestamps();
             $table->index(['testing_room_id', 'status']);

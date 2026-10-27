@@ -17,7 +17,7 @@ class DashboardController extends Controller
      */
     public function __invoke(Request $request)
     {
-        $payload = $this->plcDataService->buildDashboardPayload($request->user());
+        $payload = $this->plcDataService->buildDashboardPayload();
 
         return response()->json($payload);
     }

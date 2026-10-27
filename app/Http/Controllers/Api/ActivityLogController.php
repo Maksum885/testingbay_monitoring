@@ -16,7 +16,6 @@ class ActivityLogController extends Controller
 
     public function index(Request $request)
     {
-        $user = $request->user();
         $filters = array_filter($request->only([
             'test_cell_id',
             'register_address',
@@ -28,16 +27,6 @@ class ActivityLogController extends Controller
 
         $query = PlcRegisterLog::query()->with(['plcDevice', 'testingRoom.controlRoom'])
             ->orderByDesc('occurred_at');
-
-        if (! $user->isAdmin()) {
-            if ($user->testing_room_id) {
-                $query->where('testing_room_id', $user->testing_room_id);
-            } elseif ($user->control_room_id) {
-                $query->where('control_room_id', $user->control_room_id);
-            } else {
-                return response()->json(PlcRegisterLog::query()->whereRaw('1 = 0')->paginate(50));
-            }
-        }
 
         if (! empty($filters['test_cell_id'])) {
             $query->where('testing_room_id', $filters['test_cell_id']);
@@ -60,12 +49,7 @@ class ActivityLogController extends Controller
 
     public function byRoom(Request $request, int $room_id)
     {
-        $user = $request->user();
-        $room = TestingRoom::findOrFail($room_id);
-
-        if (! $user->isAdmin() && ! $user->canAccessTestingRoomId((int) $room->id)) {
-            return response()->json(['message' => 'Akses ditolak untuk room ini.'], 403);
-        }
+        TestingRoom::findOrFail($room_id);
 
         $filters = array_filter($request->only(['register_address', 'change_type', 'from']), fn ($v) => $v !== null && $v !== '');
 
@@ -76,12 +60,7 @@ class ActivityLogController extends Controller
 
     public function maintenanceLogs(Request $request, int $room_id)
     {
-        $user = $request->user();
-        $room = TestingRoom::findOrFail($room_id);
-
-        if (! $user->isAdmin() && ! $user->canAccessTestingRoomId((int) $room->id)) {
-            return response()->json(['message' => 'Akses ditolak untuk room ini.'], 403);
-        }
+        TestingRoom::findOrFail($room_id);
 
         $logs = PlcRegisterLog::query()
             ->where('testing_room_id', $room_id)

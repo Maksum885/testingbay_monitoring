@@ -16,18 +16,7 @@ class RoomController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
         $q = TestingRoom::query()->with('controlRoom')->where('is_active', true)->orderBy('code');
-
-        if (! $user->isAdmin()) {
-            if ($user->testing_room_id) {
-                $q->where('id', $user->testing_room_id);
-            } elseif ($user->control_room_id) {
-                $q->where('control_room_id', $user->control_room_id);
-            } else {
-                return response()->json([]);
-            }
-        }
 
         return response()->json($q->get());
     }

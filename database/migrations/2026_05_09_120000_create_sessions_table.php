@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
+            // Tetap diperlukan walau tanpa login: DatabaseSessionHandler selalu menulis user_id (null).
             $table->foreignId('user_id')->nullable()->index();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();

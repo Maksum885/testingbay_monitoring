@@ -18,7 +18,6 @@ class AlarmLog extends Model
         'triggered_at',
         'acknowledged_at',
         'resolved_at',
-        'acknowledged_by',
     ];
 
     protected function casts(): array
@@ -43,10 +42,5 @@ class AlarmLog extends Model
     public function controlRoom(): BelongsTo
     {
         return $this->belongsTo(ControlRoom::class);
-    }
-
-    public function acknowledgedByUser(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'acknowledged_by');
     }
 }

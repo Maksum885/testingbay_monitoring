@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 class DashboardController extends Controller
 {
     /**
-     * Halaman utama — token API (Sanctum) bisa di-flash sekali setelah login web.
+     * Halaman utama dashboard — single-user, tanpa login.
      */
     public function index(Request $request)
     {

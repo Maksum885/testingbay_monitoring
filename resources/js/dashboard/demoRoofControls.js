@@ -4,11 +4,6 @@ function dummyDashboardEnabled() {
     return import.meta.env.VITE_DASHBOARD_USE_DUMMY === "true";
 }
 
-function isAdminUser() {
-    const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    return u && u.role === "admin";
-}
-
 function collectRooms() {
     const list = [];
     for (const d of Object.values(store.data)) {
@@ -25,7 +20,7 @@ function collectRooms() {
  * @param {{ findRoom: Function, findCR: Function, renderRoomPanelPanes: Function, applyDummyRoofPreset: Function }} main
  */
 export function initDemoRoofControls(main) {
-    if (!dummyDashboardEnabled() || !isAdminUser()) return;
+    if (!dummyDashboardEnabled()) return;
 
     const mapEl = document.getElementById("dash-map");
     if (!mapEl) return;

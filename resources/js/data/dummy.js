@@ -4,7 +4,6 @@
  * alarm_pressure_in + pres_in (#40001): ada tekanan masuk (nilai > 0) sebelum testing → sidebar "ALARM PRESSURE".
  *
  * Dipakai hanya jika `.env` berisi VITE_DASHBOARD_USE_DUMMY=true (lalu npm run dev/build).
- * Kamera/CV demo: tiap room dapat 2 kamera enabled; contoh alarm human di Test Cell 1 / Kamera 1.
  * Default: mati — data dari /api/dashboard + PLC, bukan file ini.
  */
 export const DUMMY_CONTROL_ROOMS = {
@@ -63,7 +62,6 @@ export const DUMMY_CONTROL_ROOMS = {
                 cycle: '3/4',
                 phase_step: 3,
                 events: [
-                    { t: '14:32', c: 'cr', m: 'HUMAN DETECTED — Kamera 1 (CV demo)' },
                     { t: '14:26', c: 'wa', m: 'ALARM PRESSURE — inlet before test' },
                     { t: '14:26', c: 'cr', m: 'RIGHT MOTOR FAIL — interlock' },
                     { t: '14:24', c: 'cr', m: 'LEFT MOTOR FAIL — interlock' },

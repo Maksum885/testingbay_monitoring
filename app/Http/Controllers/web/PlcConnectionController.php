@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Web\Operator;
+namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\PlcDevice;
@@ -12,24 +12,10 @@ class PlcConnectionController extends Controller
 {
     public function index(Request $request): View
     {
-        $user = $request->user();
-
-        $q = PlcDevice::query()
+        $devices = PlcDevice::query()
             ->with(['testingRoom.controlRoom'])
-            ->orderBy('testing_room_id');
-
-        if (! $user->isAdmin()) {
-            if ($user->testing_room_id) {
-                $q->where('testing_room_id', $user->testing_room_id);
-            } else {
-                $q->whereHas(
-                    'testingRoom',
-                    fn ($q) => $q->where('control_room_id', $user->control_room_id)
-                );
-            }
-        }
-
-        $devices = $q->get();
+            ->orderBy('testing_room_id')
+            ->get();
 
         $devicesByKind = $devices->groupBy(function (PlcDevice $d) {
             return match ($d->testingRoom?->type) {
@@ -62,20 +48,7 @@ class PlcConnectionController extends Controller
 
     public function update(Request $request, PlcDevice $plc_device): RedirectResponse
     {
-        $user = $request->user();
-
         $plc_device->loadMissing('testingRoom');
-
-        if (! $user->isAdmin()) {
-            if ($user->testing_room_id
-                && (int) $plc_device->testing_room_id !== (int) $user->testing_room_id) {
-                abort(403);
-            }
-            if (! $user->testing_room_id
-                && (int) $plc_device->testingRoom->control_room_id !== (int) $user->control_room_id) {
-                abort(403);
-            }
-        }
 
         $data = $request->validate([
             'ip_address' => 'required|ip',

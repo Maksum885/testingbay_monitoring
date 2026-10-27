@@ -18,25 +18,20 @@ class AlarmController extends Controller
         $filters = $request->only(['status', 'test_cell_id', 'severity']);
 
         return response()->json(
-            $this->alarmService->paginateForUser($request->user(), $filters, 25)
+            $this->alarmService->paginate($filters, 25)
         );
     }
 
     public function count(Request $request)
     {
         return response()->json([
-            'count' => $this->alarmService->countActiveForUser($request->user()),
+            'count' => $this->alarmService->countActive(),
         ]);
     }
 
     public function acknowledge(Request $request, int $id)
     {
-        $user = $request->user();
-
         $alarm = AlarmLog::findOrFail($id);
-        if (! $this->alarmService->userMayAccessAlarm($user, $alarm)) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
 
         if ($alarm->status !== 'active') {
             return response()->json(['message' => 'Alarm tidak aktif.'], 422);
@@ -45,7 +40,6 @@ class AlarmController extends Controller
         $alarm->update([
             'status' => 'acknowledged',
             'acknowledged_at' => now(),
-            'acknowledged_by' => $user->id,
         ]);
 
         return response()->json(['message' => 'Alarm di-acknowledge.', 'alarm' => $alarm->fresh()]);
@@ -53,12 +47,7 @@ class AlarmController extends Controller
 
     public function resolve(Request $request, int $id)
     {
-        $user = $request->user();
-
         $alarm = AlarmLog::findOrFail($id);
-        if (! $this->alarmService->userMayAccessAlarm($user, $alarm)) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
 
         $alarm->update([
             'status' => 'resolved',

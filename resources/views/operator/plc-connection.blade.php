@@ -5,11 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — SPM SCADA</title>
 @vite(['resources/css/dashboard.css', 'resources/js/profile-menu.js'])
-@if(session('api_token'))
-<script>
-  sessionStorage.setItem('spm_auth_token', @json(session('api_token')));
-</script>
-@endif
 </head>
 <body class="settings-app">
 <header class="dash-topbar hdr settings-app__hdr">

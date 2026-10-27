@@ -6,11 +6,6 @@
 <title>@yield('title', 'Admin') — SPM SCADA</title>
 <link rel="icon" type="image/png" href="{{ asset('images/logospm4.png') }}">
 @vite(['resources/css/dashboard.css', 'resources/js/profile-menu.js'])
-@if(session('api_token'))
-<script>
-  sessionStorage.setItem('spm_auth_token', @json(session('api_token')));
-</script>
-@endif
 </head>
 <body class="settings-app admin-app">
 <header class="dash-topbar hdr settings-app__hdr admin-app__hdr">

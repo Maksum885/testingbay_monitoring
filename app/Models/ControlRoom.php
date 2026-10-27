@@ -20,9 +20,4 @@ class ControlRoom extends Model
     {
         return $this->hasMany(TestingRoom::class);
     }
-
-    public function users(): HasMany
-    {
-        return $this->hasMany(User::class);
-    }
 }

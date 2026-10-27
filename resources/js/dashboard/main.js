@@ -1,26 +1,9 @@
 import { store, ui, ROOM_TO_CR } from "./state.js";
 import { getDashboardData, PlcAPI } from "../services/dashboardData.js";
 
-let cameraStream = null;
 let isRefreshingRoom = false;
 let isRefreshingDashboard = false;
 let plcEchoChannelName = null;
-/** roomId:slot -> person detected (from /alarm_status). */
-let cvDetections = {};
-let cvPollTimer = null;
-
-function cvEnabled() {
-    return import.meta.env.VITE_CV_ENABLED === "true";
-}
-
-function cvBaseUrl() {
-    return String(import.meta.env.VITE_CV_BASE_URL || "").replace(/\/$/, "");
-}
-
-/** Live CV service atau demo CV (dummy dashboard). */
-function cvUiActive() {
-    return cvEnabled() || useDummyDashboard();
-}
 
 /** ACK alarm demo (VITE_DASHBOARD_USE_DUMMY) — hanya di memori; hilang setelah refresh halaman. */
 const dummyAlarmAcks = new Map();
@@ -69,8 +52,7 @@ function renderPlcStatusBadge(status) {
 function updateRoomPlcStrip(room) {
     const el = document.getElementById("rp-plc-strip");
     if (!el) return;
-    const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    if (u && u.role !== "viewer" && room?.api_room_id) {
+    if (room?.api_room_id) {
         el.classList.remove("is-hidden");
         const st = room.plc_link_status || "offline";
         el.innerHTML = renderPlcStatusBadge(st);
@@ -288,126 +270,6 @@ export function renderRoomPanelPanes(r, crId) {
     renderPaneLog(r);
 }
 
-function defaultRoomCameras() {
-    return [
-        { slot: 1, name: "Camera 1", enabled: false },
-        { slot: 2, name: "Camera 2", enabled: false },
-    ];
-}
-
-function isCvHumanDetected(room, slot) {
-    if (!room) return false;
-    const key = cvDetectionKeyForRoom(room, slot);
-    return Boolean(cvDetections[key]);
-}
-
-function renderCameraTile(cam, room) {
-    const label = cam.name || `Camera ${cam.slot}`;
-    if (!cvUiActive()) {
-        return `
-  <div class="cam-v2 cam-v2--off">
-    <i class="ti ti-video-off" aria-hidden="true"></i>
-    <span class="cam-v2-off-msg">CV disabled</span>
-    <span class="cam-v2-lbl">${label}</span>
-  </div>`;
-    }
-    if (!cam.enabled) {
-        return `
-  <div class="cam-v2 cam-v2--disabled">
-    <i class="ti ti-video-off" aria-hidden="true"></i>
-    <span class="cam-v2-off-msg">Camera off</span>
-    <span class="cam-v2-lbl">${label}</span>
-  </div>`;
-    }
-    if (useDummyDashboard()) {
-        const human = isCvHumanDetected(room, cam.slot);
-        return `
-  <div class="cam-v2 cam-v2--dummy${human ? " cam-v2--dummy-human" : ""}">
-    <div class="cam-dummy-feed" aria-hidden="true">
-      <span class="cam-dummy-feed__grid"></span>
-      ${human ? '<i class="ti ti-user cam-dummy-feed__person"></i>' : '<i class="ti ti-video cam-dummy-feed__icon"></i>'}
-    </div>
-    <span class="cam-v2-lbl">${label}</span>
-    <span class="cam-live"><span class="cam-live-dot"></span></span>
-  </div>`;
-    }
-    // Gunakan stream_url dari admin settings jika tersedia, fallback ke cvBaseUrl path
-    const streamSrc = cam.stream_url
-        || (room?.api_room_id ? `${cvBaseUrl()}/stream/${room.api_room_id}/${cam.slot}` : null);
-    if (!streamSrc) {
-        return `
-  <div class="cam-v2 cam-v2--disabled">
-    <i class="ti ti-video-off" aria-hidden="true"></i>
-    <span class="cam-v2-off-msg">Camera off</span>
-    <span class="cam-v2-lbl">${label}</span>
-  </div>`;
-    }
-    const escapedSrc = streamSrc.replace(/'/g, "\\'");
-    const escapedLabel = label.replace(/'/g, "\\'");
-    return `
-  <div class="cam-v2">
-    <img src="${streamSrc}" class="cam-stream" alt="${label}">
-    <button class="cam-v2-expand" onclick="openCameraFullscreen('${escapedSrc}','${escapedLabel}');event.stopPropagation()" title="Perbesar">
-      <i class="ti ti-arrows-maximize" aria-hidden="true"></i>
-    </button>
-    <span class="cam-v2-lbl">${label}</span>
-    <span class="cam-live">
-      <span class="cam-live-dot"></span>
-      LIVE
-    </span>
-  </div>`;
-}
-
-function renderCameraSectionHtml(room) {
-    const cams = room?.cameras?.length ? room.cameras : defaultRoomCameras();
-    const hasLive = cvUiActive() && cams.some((c) => c.enabled);
-    const wideOn = ui.cameraWide ? "true" : "false";
-    const wideIco = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
-    const wideBtn = hasLive
-        ? `<button
-    type="button"
-    class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}"
-    id="btn-cam-wide"
-    onclick="toggleCameraWide()"
-    aria-pressed="${wideOn}"
-    title="Use map area for larger video">
-    <i class="${wideIco}" aria-hidden="true"></i>
-    Wide view
-  </button>`
-        : "";
-    return `
-<div class="cam-toolbar-v2">
-  <div class="section-label cam-toolbar-v2__title">Camera</div>
-  ${wideBtn}
-</div>
-<div class="cam-grid-v2">
-  ${cams.map((cam) => renderCameraTile(cam, room)).join("")}
-</div>`;
-}
-
-function syncCameraWideClass() {
-    const rp = document.getElementById("rpanel");
-    if (!rp || !rp.classList.contains("open")) return;
-    const onOverview =
-        document.getElementById("tab-o") && document.getElementById("tab-o").classList.contains("on");
-    const wide = ui.cameraWide && onOverview;
-    rp.classList.toggle("dash-rpanel--camera-wide", wide);
-}
-
-export function toggleCameraWide() {
-    ui.cameraWide = !ui.cameraWide;
-    syncCameraWideClass();
-    const btn = document.getElementById("btn-cam-wide");
-    if (btn) {
-        btn.setAttribute("aria-pressed", ui.cameraWide ? "true" : "false");
-        btn.classList.toggle("is-active", ui.cameraWide);
-        const ico = btn.querySelector("i");
-        if (ico) {
-            ico.className = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
-        }
-    }
-}
-
 function renderPaneOverview(r, crId) {
     const p1 = Number(r.pres_bbm ?? r.test_pressure ?? 0);
     const p2 = Number(r.pres_2 ?? 0);
@@ -461,14 +323,12 @@ function renderPaneOverview(r, crId) {
   </div>`;
 
     document.getElementById("pane-o").innerHTML = `
-  ${renderCameraSectionHtml(r)}
   ${pressureSection}
   ${renderRoofPositionHtml(r)}
   ${opsSection}
   ${dummy ? renderDummyPlcControls(r) : ""}
   ${dummy ? renderDummyAlarmTriggers(r) : ""}
   ${renderRoomAlarmSection(r)}`;
-    syncCameraWideClass();
 }
 
 function renderPaneLog(r) {
@@ -508,8 +368,6 @@ const DUMMY_ALARM_LABELS = {
     left_motor: "LEFT MOTOR FAIL",
     right_motor: "RIGHT MOTOR FAIL",
     motor: "MOTOR FAIL",
-    human_1: "HUMAN DETECTED — Camera 1",
-    human_2: "HUMAN DETECTED — Camera 2",
 };
 
 /**
@@ -521,8 +379,7 @@ export function ackDummyRoomAlarm(roomId, alarmKey) {
     const room = findRoom(roomId);
     if (!room) return;
 
-    const isHumanAlarm = alarmKey === "human_1" || alarmKey === "human_2";
-    if (!isHumanAlarm && !DUMMY_ALARM_LABELS[alarmKey]) return;
+    if (!DUMMY_ALARM_LABELS[alarmKey]) return;
 
     if (!dummyAlarmAcks.has(roomId)) dummyAlarmAcks.set(roomId, new Set());
     dummyAlarmAcks.get(roomId).add(alarmKey);
@@ -542,12 +399,6 @@ export function ackDummyRoomAlarm(roomId, alarmKey) {
             break;
         case "motor":
             room.alarm_motor = false;
-            break;
-        case "human_1":
-            delete cvDetections[cvDetectionKey(roomId, 1)];
-            break;
-        case "human_2":
-            delete cvDetections[cvDetectionKey(roomId, 2)];
             break;
     }
 
@@ -665,8 +516,6 @@ function renderDummyAlarmTriggers(r) {
       <button class="demo-trigger-btn demo-trigger-btn--danger" onclick="triggerDummyAlarm('${r.id}','emergency')">Emergency</button>
       ${motorBtns}
       <button class="demo-trigger-btn demo-trigger-btn--warn" onclick="triggerDummyAlarm('${r.id}','pressure_in')">Pressure Alarm</button>
-      <button class="demo-trigger-btn demo-trigger-btn--info" onclick="triggerDummyAlarm('${r.id}','human_1')">Human Cam 1</button>
-      <button class="demo-trigger-btn demo-trigger-btn--info" onclick="triggerDummyAlarm('${r.id}','human_2')">Human Cam 2</button>
     </div>
   </div>`;
 }
@@ -755,8 +604,6 @@ export function setDummyPlcStatus(roomId, status) {
 
 export function triggerDummyAlarm(roomId, alarmKey) {
     if (!useDummyDashboard() || !roomId) return;
-    if (alarmKey === "human_1") { setDummyCvDetection(roomId, 1, true); return; }
-    if (alarmKey === "human_2") { setDummyCvDetection(roomId, 2, true); return; }
     const room = findRoom(roomId);
     if (!room) return;
     dummyAlarmAcks.get(roomId)?.delete(alarmKey);
@@ -786,46 +633,14 @@ function renderRoomAlarmSection(r) {
     } else if (r.alarm_motor) {
         rows.push({ key: "motor", t: "MOTOR FAIL", sub: r.nm });
     }
-    // Alarm CV — dua sumber:
-    // - Dummy mode: cvDetections dari initDummyCvState() (per slot)
-    // - Live mode: r.alarm_cv_person dari PLC register 40010 via AlarmLog (per room)
-    if (cvUiActive()) {
-        if (useDummyDashboard()) {
-            (r.cameras || defaultRoomCameras()).forEach((cam) => {
-                if (!cam.enabled) return;
-                if (!isCvHumanDetected(r, cam.slot)) return;
-                if (dummyAlarmAcks.get(r.id)?.has(`human_${cam.slot}`)) return;
-                rows.push({
-                    key: `human_${cam.slot}`,
-                    t: `HUMAN DETECTED —${cam.name || `Camera ${cam.slot}`}`,
-                    sub: "CV demo detection",
-                });
-            });
-        } else {
-            // Live: cek alarm dari PLC (r.alarm_cv_person) ATAU polling /alarm_status (isCvHumanDetected)
-            (r.cameras || []).forEach((cam) => {
-                if (!cam.enabled) return;
-                if (!r.alarm_cv_person && !isCvHumanDetected(r, cam.slot)) return;
-                rows.push({
-                    key: `human_${cam.slot}`,
-                    t: `HUMAN DETECTED —${cam.name || `Camera ${cam.slot}`}`,
-                    sub: "CV: Person detected in test area",
-                });
-            });
-        }
-    }
     if (!rows.length)
         return `<div class="section-label" style="margin-top:10px">Room alarms</div><div style="font-size:11px;color:#6b7280">No active alarms in this room.</div>`;
     const dummy = useDummyDashboard();
-    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    const isAdmin = scadaUser?.role === "admin";
     let h = `<div class="section-label" style="margin-top:10px">Room alarms</div>`;
     rows.forEach((x) => {
         const ackBtn = dummy
-            ? (isAdmin ? "" : `<button type="button" class="btn-ack" onclick="ackDummyRoomAlarm('${r.id}','${x.key}')" title="Acknowledge (demo — resets on page refresh)">ACK</button>`)
-            : isAdmin
-                ? ""
-                : `<button type="button" class="btn-ack" disabled title="Acknowledge PLC alarm (live mode)">ACK</button>`;
+            ? `<button type="button" class="btn-ack" onclick="ackDummyRoomAlarm('${r.id}','${x.key}')" title="Acknowledge (demo — resets on page refresh)">ACK</button>`
+            : `<button type="button" class="btn-ack" disabled title="Acknowledge PLC alarm (live mode)">ACK</button>`;
         h += `<div class="alarm-room-v2">
     <i class="ti ti-alert-triangle" style="font-size:15px;color:var(--cr)"></i>
     <div style="flex:1"><div class="alarm-room-title">${x.t}</div><div class="alarm-room-sub">${x.sub}</div></div>
@@ -859,33 +674,6 @@ function roomSidebarRowHtml(r, crId) {
 }
 
 export function buildSidebarRooms() {
-    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    const scopedRoomId = scadaUser?.testing_room_id ? Number(scadaUser.testing_room_id) : null;
-    const roomVisible = (r) => !scopedRoomId || Number(r.api_room_id) === scopedRoomId;
-
-    const flatEl = document.getElementById("rooms-flat");
-    if (flatEl) {
-        const pairs = [];
-        Object.entries(store.data).forEach(([crId, d]) => {
-            (d.rooms || []).forEach((r) => {
-                if (roomVisible(r)) pairs.push({ r, crId });
-            });
-        });
-        pairs.sort((a, b) =>
-            (a.r.nm || "").localeCompare(b.r.nm || "", undefined, { numeric: true, sensitivity: "base" }),
-        );
-        flatEl.innerHTML = pairs.map(({ r, crId }) => roomSidebarRowHtml(r, crId)).join("");
-
-        // Auto-open the single assigned room for scoped operators
-        if (scopedRoomId && pairs.length === 1 && !ui.curRoomId) {
-            const { r, crId } = pairs[0];
-            setTimeout(() => openRoomPanel(r.id, crId), 120);
-        }
-
-        updateCenterStatusBar();
-        return;
-    }
-
     Object.entries(store.data).forEach(([crId, d]) => {
         const cont = document.getElementById(`rooms-${crId}`);
         if (!cont) return;
@@ -917,7 +705,6 @@ export function toggleRooms(crId) {
     if (willExpand) {
         stopPlcEcho();
         updateRoomPlcStrip(null);
-        stopCamera();
         if (ui.lv) {
             clearInterval(ui.lv);
             ui.lv = null;
@@ -939,39 +726,11 @@ export function toggleRooms(crId) {
     }
 }
 
-export async function showCamera() {
-    const camView = document.getElementById("camera-view");
-    const video = document.getElementById("camera");
-    camView.classList.add("is-visible");
-    if (cameraStream) {
-        video.srcObject = cameraStream;
-        return;
-    }
-    try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-        });
-        video.srcObject = cameraStream;
-    } catch (err) {
-        console.error("Camera error:", err);
-        alert("Camera could not be accessed.");
-    }
-}
-
-export function stopCamera() {
-    if (cameraStream) {
-        cameraStream.getTracks().forEach((t) => t.stop());
-        cameraStream = null;
-    }
-    document.getElementById("camera-view").classList.remove("is-visible");
-}
-
 export function openRoomPanel(roomId, crId) {
     const r = findRoom(roomId);
     const crD = store.data[crId];
     if (!r || !crD) return;
 
-    ui.cameraWide = false;
     ui.panelMode = "room";
     ui.curRoomId = roomId;
     ui.curId = crId;
@@ -1005,9 +764,6 @@ export function openRoomPanel(roomId, crId) {
     if (typeof window.__syncDemoRoofSelect === "function") {
         window.__syncDemoRoofSelect(roomId);
     }
-    if (typeof window.__syncDemoCvSelect === "function") {
-        window.__syncDemoCvSelect(roomId);
-    }
 
     const cont = document.getElementById(`rooms-${crId}`);
     const btn = document.getElementById(`exp-${crId}`);
@@ -1038,11 +794,8 @@ export function openPanel(id) {
 }
 
 export function closePanel() {
-    ui.cameraWide = false;
-    document.getElementById("rpanel")?.classList.remove("dash-rpanel--camera-wide");
     stopPlcEcho();
     updateRoomPlcStrip(null);
-    stopCamera();
     const tEl = document.getElementById("rp-title");
     if (tEl) tEl.textContent = "—";
     document.getElementById("rpanel").classList.remove("open");
@@ -1112,10 +865,6 @@ export function renderEvents(id) {
 }
 
 export function swTab(n) {
-    if (n !== "o") {
-        ui.cameraWide = false;
-        document.getElementById("rpanel")?.classList.remove("dash-rpanel--camera-wide");
-    }
     ["o", "e"].forEach((t) => {
         const tab = document.getElementById(`tab-${t}`);
         const pane = document.getElementById(`pane-${t}`);
@@ -1126,7 +875,6 @@ export function swTab(n) {
     const activePane = document.getElementById(`pane-${n}`);
     if (activeTab) activeTab.classList.add("on");
     if (activePane) activePane.style.display = "block";
-    syncCameraWideClass();
 }
 
 function pushAlarm(out, lv, nm, sub, crId, roomId) {
@@ -1176,92 +924,13 @@ function getSidebarPressureInAlerts() {
     return out;
 }
 
-function cvDetectionKey(roomId, slot) {
-    return `${roomId}:${slot}`;
-}
-
-function cvDetectionKeyForRoom(room, slot) {
-    const id = useDummyDashboard() ? room?.id : room?.api_room_id;
-    return cvDetectionKey(id, slot);
-}
-
-function resolveRoomFromCvKey(roomKey) {
-    if (useDummyDashboard()) return findRoom(roomKey);
-    const room = findRoomByApiId(Number(roomKey));
-    return room || null;
-}
-
-function getCvHumanAlerts() {
-    if (!cvUiActive()) return [];
-    const out = [];
-    for (const [key, detected] of Object.entries(cvDetections)) {
-        if (!detected) continue;
-        const [roomKey, slot] = key.split(":");
-        const room = resolveRoomFromCvKey(roomKey);
-        if (useDummyDashboard() && room && dummyAlarmAcks.get(room.id)?.has(`human_${slot}`)) {
-            continue;
-        }
-        const uiRoomId = room?.id || "";
-        const crId = uiRoomId ? findCR(uiRoomId) : "";
-        const cam = room?.cameras?.find((c) => String(c.slot) === String(slot));
-        const camLabel = cam?.name || `Camera ${slot}`;
-        pushAlarm(
-            out,
-            "cr",
-            room?.nm || `Room ${roomKey}`,
-            `HUMAN — ${camLabel}`,
-            crId || "",
-            uiRoomId || "",
-        );
-    }
-    return out;
-}
-
-export function setDummyCvDetection(roomId, slot, detected) {
-    if (!useDummyDashboard() || !roomId) return;
-    const key = cvDetectionKey(roomId, slot);
-    const next = Boolean(detected);
-    if (Boolean(cvDetections[key]) === next) return;
-    cvDetections[key] = next;
-    if (!next) delete cvDetections[key];
-
-    const room = findRoom(roomId);
-    if (room) {
-        if (!Array.isArray(room.events)) room.events = [];
-        const cam = room.cameras?.find((c) => Number(c.slot) === Number(slot));
-        const camLabel = cam?.name || `Camera ${slot}`;
-        room.events.unshift({
-            t: getNow(),
-            c: next ? "cr" : "ok",
-            m: next ? `HUMAN DETECTED — ${camLabel} (CV demo)` : `Human cleared — ${camLabel} (CV demo)`,
-        });
-    }
-
-    updateAlarmSidebar();
-    buildSidebarRooms();
-}
-
-function initDummyCvState() {
-    cvDetections = { [cvDetectionKey("cell1", 1)]: true };
-    updateAlarmSidebar();
-}
-
-/** Satu daftar sidebar: emergency, pressure in, motor, lalu CV human. */
+/** Satu daftar sidebar: emergency, pressure in, lalu motor. */
 export function getSidebarCombinedAlerts() {
-    const all = [
+    return [
         ...getSidebarEmergencyAlerts(),
         ...getSidebarPressureInAlerts(),
         ...getSidebarAlarms(),
-        ...getCvHumanAlerts(),
     ];
-    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    const scopedApiId = scadaUser?.testing_room_id ? Number(scadaUser.testing_room_id) : null;
-    if (!scopedApiId) return all;
-    return all.filter((a) => {
-        if (!a.roomId) return false;
-        const room = findRoom(a.roomId);
-        return room && Number(room.api_room_id) === scopedApiId;
-    });
 }
 
 export function getNow() {
@@ -1370,10 +1039,6 @@ function applySnapshotToRoom(room, snapshot) {
     const rawIn = Number(extractSnapshotValue(snapshot, ["40001", "tekanan_masuk", "line_pressure"], NaN));
     const processPressure = Number(extractSnapshotValue(snapshot, ["40011", "pressure_1"], NaN));
     const pres2 = Number(extractSnapshotValue(snapshot, ["40012", "pressure_2"], NaN));
-    // Register 40010 = Holding Register 10 = %MW9 = cv_person_detected (ditulis Jetson Nano via FC6)
-    const cvPersonDetectedPlc = Boolean(
-        extractSnapshotValue(snapshot, ["40010", "cv_person_detected"], false),
-    );
     const alarmAlert = Boolean(extractSnapshotValue(snapshot, ["40002", "alarm_alert"], false));
     const maintenance = Boolean(extractSnapshotValue(snapshot, ["40003", "mode_maintenance"], false));
     const roofClosed = Boolean(extractSnapshotValue(snapshot, ["40004", "roof_tertutup"], false));
@@ -1413,9 +1078,6 @@ function applySnapshotToRoom(room, snapshot) {
 
     /* Hanya percaya register PLC jika ruang bertanda online (hindari cache lama saat putus). */
     room.alarm_emergency = plcLive && alarmAlert;
-    // cv_person_detected dari PLC register 40010 (Holding Register 10 = %MW9)
-    // Dipakai sebagai backup sumber data saat /alarm_status tidak tersedia.
-    room.cv_person_detected_plc = plcLive && cvPersonDetectedPlc;
     room.mode = maintenance ? "MAINTENANCE" : "AUTO";
     room.door_lock = doorLocked ? "locked" : "unlocked";
     room.phase = testingOn ? "RUNNING" : "STANDBY";
@@ -1528,93 +1190,6 @@ export function initLogoFallback() {
 
 export function initOptionalTabs() {}
 
-function parseCvAlarmPayload(data) {
-    const next = {};
-    const rooms = data?.rooms;
-    if (!rooms || typeof rooms !== "object") {
-        if (data?.person_detected) {
-            next[cvDetectionKey(1, 1)] = true;
-        }
-        return next;
-    }
-    for (const [roomId, slots] of Object.entries(rooms)) {
-        if (!slots || typeof slots !== "object") continue;
-        for (const [slot, detected] of Object.entries(slots)) {
-            next[cvDetectionKey(roomId, slot)] = Boolean(detected);
-        }
-    }
-    return next;
-}
-
-function cvDetectionsChanged(prev, next) {
-    const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
-    for (const k of keys) {
-        if (Boolean(prev[k]) !== Boolean(next[k])) return true;
-    }
-    return false;
-}
-
-async function pollCvAlarmStatus() {
-    if (useDummyDashboard()) return;
-    if (!cvEnabled()) {
-        if (Object.keys(cvDetections).length) {
-            cvDetections = {};
-            updateAlarmSidebar();
-        }
-        return;
-    }
-    const base = cvBaseUrl();
-    if (!base) return;
-    try {
-        const res = await fetch(`${base}/alarm_status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const next = parseCvAlarmPayload(data);
-        if (cvDetectionsChanged(cvDetections, next)) {
-            cvDetections = next;
-            updateAlarmSidebar();
-        }
-    } catch (err) {
-        console.warn("[CV] alarm_status:", err?.message || err);
-    }
-}
-
-export function initCvMonitoring() {
-    if (cvPollTimer) clearInterval(cvPollTimer);
-    cvPollTimer = null;
-    cvDetections = {};
-    if (useDummyDashboard()) {
-        initDummyCvState();
-        return;
-    }
-    if (!cvEnabled()) return;
-    pollCvAlarmStatus();
-    cvPollTimer = setInterval(pollCvAlarmStatus, 1000);
-}
-
-function _camFsKeydown(e) {
-    if (e.key === "Escape") closeCameraFullscreen();
-}
-
-export function openCameraFullscreen(src, label) {
-    const overlay = document.getElementById("cam-fullscreen");
-    const img = document.getElementById("cam-fs-img");
-    const lbl = document.getElementById("cam-fs-label");
-    if (!overlay || !img) return;
-    if (lbl) lbl.textContent = label;
-    img.src = src;
-    overlay.removeAttribute("hidden");
-    document.addEventListener("keydown", _camFsKeydown);
-}
-
-export function closeCameraFullscreen() {
-    const overlay = document.getElementById("cam-fullscreen");
-    const img = document.getElementById("cam-fs-img");
-    if (img) img.src = "";
-    if (overlay) overlay.setAttribute("hidden", "");
-    document.removeEventListener("keydown", _camFsKeydown);
-}
-
 export function registerGlobals() {
     window.toggleSidebar = toggleSidebar;
     window.closeSidebar = closeSidebar;
@@ -1623,11 +1198,8 @@ export function registerGlobals() {
     window.closePanel = closePanel;
     window.swTab = swTab;
     window.toggleRooms = toggleRooms;
-    window.toggleCameraWide = toggleCameraWide;
     window.ackDummyRoomAlarm = ackDummyRoomAlarm;
     window.applyDummyRoofPreset = applyDummyRoofPreset;
-    window.openCameraFullscreen = openCameraFullscreen;
-    window.closeCameraFullscreen = closeCameraFullscreen;
     window.setDummyPressure = setDummyPressure;
     window.setDummyPanelMode = setDummyPanelMode;
     window.setDummyTestStatus = setDummyTestStatus;

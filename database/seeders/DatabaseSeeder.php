@@ -3,12 +3,9 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 use App\Models\ControlRoom;
 use App\Models\TestingRoom;
 use App\Models\PlcDevice;
-use App\Models\RoomCamera;
 
 class DatabaseSeeder extends Seeder
 {
@@ -50,48 +47,8 @@ class DatabaseSeeder extends Seeder
                 'is_enabled' => true,
                 'status' => 'offline',
             ]);
-
-            foreach ([1 => 'Camera 1', 2 => 'Camera 2'] as $slot => $camName) {
-                RoomCamera::create([
-                    'testing_room_id' => $testingRoom->id,
-                    'slot' => $slot,
-                    'name' => $camName,
-                    'rtsp_host' => '192.168.1.64',
-                    'rtsp_port' => 554,
-                    'rtsp_path' => '/Streaming/Channels/102',
-                    'rtsp_username' => 'admin',
-                    'rtsp_password' => 'changeme',
-                    'is_enabled' => false,
-                ]);
-            }
         }
 
-        // ── Users ──────────────────────────────────────────────────────────────
-        User::create([
-            'name'            => 'Administrator',
-            'email'           => 'admin@spm-scada.com',
-            'password'        => Hash::make('admin123'),
-            'role'            => 'admin',
-            'control_room_id' => null,
-            'testing_room_id' => null,
-            'is_active'       => true,
-        ]);
-
-        // Satu operator per testing room (akses hanya room itu + Settings PLC untuk room itu).
-        foreach (TestingRoom::query()->orderBy('id')->get() as $tr) {
-            User::create([
-                'name'            => 'Operator · '.$tr->name,
-                'email'           => 'operator.room'.$tr->id.'@spm-scada.com',
-                'password'        => Hash::make('operator123'),
-                'role'            => 'operator',
-                'testing_room_id' => $tr->id,
-                'control_room_id' => $tr->control_room_id,
-                'is_active'       => true,
-            ]);
-        }
-
-        $this->command->info('✓ Seed selesai!');
-        $this->command->line('  Admin: admin@spm-scada.com / admin123');
-        $this->command->line('  Operator room N: operator.room{N}@spm-scada.com / operator123  (N = 1…11)');
+        $this->command->info('✓ Seed selesai! (single-user, tanpa login — semua menu terbuka)');
     }
 }

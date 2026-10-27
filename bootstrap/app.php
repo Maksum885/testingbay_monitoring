@@ -12,13 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->redirectGuestsTo(fn () => route('login'));
-        $middleware->redirectUsersTo(fn () => route('dashboard'));
-
-        $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
-            'room.access' => \App\Http\Middleware\RoomAccessMiddleware::class,
-        ]);
+        //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

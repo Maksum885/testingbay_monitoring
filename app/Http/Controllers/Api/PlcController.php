@@ -225,43 +225,6 @@ class PlcController extends Controller
                     ]);
             }
         }
-
-        // ── Alarm log khusus register 40010 (CV: Orang Terdeteksi) ───────────
-        // "Holding Register 10" = %MW9 = PDU 9 = address 40010.
-        // Ditulis oleh Jetson Nano via Modbus TCP FC6 (Write Single Register).
-        // Nilai 1 = ada orang terdeteksi di area kamera → nyalakan lampu via PLC ladder.
-        // Nilai 0 = tidak ada orang → matikan lampu.
-        if ($address === 40010) {
-            if ($newVal) {
-                // Orang terdeteksi — buat alarm baru jika belum ada yang aktif
-                $alreadyActive = AlarmLog::where('testing_room_id', $room->id)
-                    ->where('alarm_code', 'CV_PERSON_DETECTED')
-                    ->where('status', 'active')
-                    ->exists();
-
-                if (! $alreadyActive) {
-                    AlarmLog::create([
-                        'plc_device_id'    => $device->id,
-                        'testing_room_id'  => $room->id,
-                        'control_room_id'  => $room->control_room_id,
-                        'alarm_code'       => 'CV_PERSON_DETECTED',
-                        'alarm_description'=> "CV: Orang terdeteksi di area kamera — {$room->name}",
-                        'severity'         => 'warning',
-                        'status'           => 'active',
-                        'triggered_at'     => $time,
-                    ]);
-                }
-            } else {
-                // Orang tidak ada lagi → resolve semua alarm CV aktif untuk ruangan ini
-                AlarmLog::where('testing_room_id', $room->id)
-                    ->where('alarm_code', 'CV_PERSON_DETECTED')
-                    ->where('status', 'active')
-                    ->update([
-                        'status'      => 'resolved',
-                        'resolved_at' => $time,
-                    ]);
-            }
-        }
     }
 
     private function resolveChangeType(int $address, mixed $newVal): string
@@ -273,8 +236,6 @@ class PlcController extends Controller
             40007  => 'roof_moving',
             40008  => 'door_locked',
             40009  => $newVal ? 'testing_started'      : 'testing_stopped',
-            // 40010 = Holding Register 10 = %MW9 = ditulis Jetson Nano (CV) via FC6
-            40010  => $newVal ? 'cv_alarm_triggered'   : 'cv_alarm_cleared',
             default => is_bool($newVal) ? 'status_change' : 'value_change',
         };
     }
